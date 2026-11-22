@@ -225,6 +225,11 @@ uint32_t d3d8_GetFrameIntervalHistory(uint64_t after_serial, uint32_t *out,
 
 static void (*g_host_overlay_callback)(void);
 void d3d8_SetHostOverlayCallback(void (*callback)(void)){g_host_overlay_callback=callback;}
+static float (*g_present_brightness_callback)(void);
+void d3d8_SetPresentBrightnessCallback(float (*callback)(void)){g_present_brightness_callback=callback;}
+static float (*g_present_sharpen_callback)(void);
+void d3d8_SetPresentSharpenCallback(float (*callback)(void)){g_present_sharpen_callback=callback;}
+static void d3d8_apply_present_brightness(IDXGISwapChain *chain);
 /* Preserve Present's result; querying removal reason is failure-only. */
 static HRESULT preview_present(IDXGISwapChain *chain, UINT flags)
 {
@@ -236,6 +241,8 @@ static HRESULT preview_present(IDXGISwapChain *chain, UINT flags)
         if (SUCCEEDED(IDXGISwapChain_GetFullscreenState(chain, &fullscreen, NULL)) && !fullscreen)
             flags |= DXGI_PRESENT_ALLOW_TEARING;
     }
+    /* Gamma before host overlays: diagnostics/prompts keep their own levels. */
+    if(!(flags & DXGI_PRESENT_TEST))d3d8_apply_present_brightness(chain);
     if(g_host_overlay_callback && !(flags & DXGI_PRESENT_TEST))g_host_overlay_callback();
     HRESULT result = IDXGISwapChain_Present(chain, sync, flags);
     /* Flip presentation unbinds back buffer zero. Restore the tracked guest
@@ -2397,6 +2404,166 @@ BOOL d3d8_CompositeVideoOverlay(
         background_srv, background_width, background_height, color_key_enabled, color_key, FALSE);
 }
 
+/* Player brightness (Recomp Options). The finished back buffer is copied once
+ * and redrawn through out = in^exponent: black/white stay fixed, so raising
+ * brightness lifts shadows and mid-tones without clipping highlights. Exactly
+ * 1.0 skips the pass, leaving the default path untouched. All pipeline state
+ * changed here is restored, because guest-state binding is cached elsewhere. */
+static ID3D11PixelShader *g_brightness_ps;
+static ID3D11Buffer *g_brightness_cb;
+static ID3D11Texture2D *g_brightness_copy;
+static ID3D11ShaderResourceView *g_brightness_srv;
+static D3D11_TEXTURE2D_DESC g_brightness_desc;
+static BOOL g_brightness_failed;
+static void d3d8_release_present_brightness(void)
+{
+    if (g_brightness_srv) { ID3D11ShaderResourceView_Release(g_brightness_srv); g_brightness_srv = NULL; }
+    if (g_brightness_copy) { ID3D11Texture2D_Release(g_brightness_copy); g_brightness_copy = NULL; }
+    if (g_brightness_cb) { ID3D11Buffer_Release(g_brightness_cb); g_brightness_cb = NULL; }
+    if (g_brightness_ps) { ID3D11PixelShader_Release(g_brightness_ps); g_brightness_ps = NULL; }
+    memset(&g_brightness_desc, 0, sizeof(g_brightness_desc));
+}
+static BOOL d3d8_ensure_brightness_pipeline(const D3D11_TEXTURE2D_DESC *back)
+{
+    /* x = gamma exponent, y = sharpening 0..1 (contrast-adaptive, after AMD
+     * FidelityFX CAS: the cross-neighbour weight shrinks where local contrast
+     * is already high, so edges sharpen without ringing or halos). */
+    static const char ps_source[] =
+        "Texture2D source_texture : register(t0);"
+        "cbuffer Picture : register(b0) { float4 settings; };"
+        "float3 px(int2 p){return saturate(source_texture.Load(int3(p,0)).rgb);}"
+        "float4 main(float4 position : SV_POSITION, float2 uv : TEXCOORD0) : SV_Target {"
+        " int2 p=int2(position.xy); float3 c=px(p);"
+        " if(settings.y>0.0){"
+        "  float3 n=px(p+int2(0,-1)),s=px(p+int2(0,1)),e=px(p+int2(1,0)),w=px(p+int2(-1,0));"
+        "  float3 mn=min(c,min(min(n,s),min(e,w))),mx=max(c,max(max(n,s),max(e,w)));"
+        "  float3 amp=sqrt(saturate(min(mn,2.0-mx)/max(mx,1e-4)));"
+        "  float3 wt=-amp/lerp(8.0,5.0,settings.y);"
+        "  c=saturate((c+wt*(n+s+e+w))/(1.0+4.0*wt)); }"
+        " return float4(pow(c, settings.xxx), 1.0); }";
+    ID3D11Device *device = g_device_state.d3d11_device;
+    HRESULT hr;
+    if (!d3d8_ensure_resolve_pipeline()) return FALSE;
+    if (!g_brightness_ps) {
+        ID3DBlob *blob = NULL, *errors = NULL;
+        hr = d3d8_compile_shader(ps_source, sizeof(ps_source) - 1u, "recomp_brightness_ps",
+                                 NULL, NULL, "main", "ps_5_0", 0, 0, &blob, &errors);
+        if (FAILED(hr)) {
+            fprintf(stderr, "D3D8: brightness PS compile failed: %s\n",
+                    errors ? (char *)ID3D10Blob_GetBufferPointer(errors) : "unknown");
+            if (errors) ID3D10Blob_Release(errors);
+            return FALSE;
+        }
+        if (errors) ID3D10Blob_Release(errors);
+        hr = ID3D11Device_CreatePixelShader(device, ID3D10Blob_GetBufferPointer(blob),
+                                            ID3D10Blob_GetBufferSize(blob), NULL, &g_brightness_ps);
+        ID3D10Blob_Release(blob);
+        if (FAILED(hr)) return FALSE;
+    }
+    if (!g_brightness_cb) {
+        D3D11_BUFFER_DESC cb = {0};
+        cb.ByteWidth = 16u; cb.Usage = D3D11_USAGE_DEFAULT; cb.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
+        if (FAILED(ID3D11Device_CreateBuffer(device, &cb, NULL, &g_brightness_cb))) return FALSE;
+    }
+    if (!g_brightness_copy || g_brightness_desc.Width != back->Width ||
+        g_brightness_desc.Height != back->Height || g_brightness_desc.Format != back->Format) {
+        D3D11_TEXTURE2D_DESC desc = *back;
+        if (g_brightness_srv) { ID3D11ShaderResourceView_Release(g_brightness_srv); g_brightness_srv = NULL; }
+        if (g_brightness_copy) { ID3D11Texture2D_Release(g_brightness_copy); g_brightness_copy = NULL; }
+        desc.MipLevels = 1u; desc.ArraySize = 1u;
+        desc.SampleDesc.Count = 1u; desc.SampleDesc.Quality = 0u;
+        desc.Usage = D3D11_USAGE_DEFAULT; desc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+        desc.CPUAccessFlags = 0u; desc.MiscFlags = 0u;
+        if (FAILED(ID3D11Device_CreateTexture2D(device, &desc, NULL, &g_brightness_copy))) return FALSE;
+        if (FAILED(ID3D11Device_CreateShaderResourceView(device, (ID3D11Resource *)g_brightness_copy,
+                                                         NULL, &g_brightness_srv))) return FALSE;
+        g_brightness_desc = *back;
+    }
+    return TRUE;
+}
+static void d3d8_apply_present_brightness(IDXGISwapChain *chain)
+{
+    ID3D11DeviceContext *ctx = g_device_state.d3d11_context;
+    ID3D11Texture2D *back = NULL;
+    D3D11_TEXTURE2D_DESC desc;
+    float exponent = g_present_brightness_callback ? g_present_brightness_callback() : 1.0f;
+    float sharpen = g_present_sharpen_callback ? g_present_sharpen_callback() : 0.0f;
+    if (!(exponent > 0.2f && exponent < 5.0f)) exponent = 1.0f;
+    if (!(sharpen > 0.0f)) sharpen = 0.0f; else if (sharpen > 1.0f) sharpen = 1.0f;
+    if (((exponent > 0.999f && exponent < 1.001f) && sharpen == 0.0f) ||
+        g_brightness_failed || !chain || !ctx || !g_device_state.default_rtv) return;
+    if (FAILED(IDXGISwapChain_GetBuffer(chain, 0, &IID_ID3D11Texture2D, (void **)&back)) || !back) return;
+    ID3D11Texture2D_GetDesc(back, &desc);
+    if (desc.SampleDesc.Count != 1u || !d3d8_ensure_brightness_pipeline(&desc)) {
+        if (desc.SampleDesc.Count == 1u) {
+            g_brightness_failed = TRUE; /* don't retry a broken pipeline every frame */
+            xbox_preview_log_event("graphics-error", "brightness pass unavailable; using original output");
+        }
+        ID3D11Texture2D_Release(back);
+        return;
+    }
+    ID3D11DeviceContext_CopyResource(ctx, (ID3D11Resource *)g_brightness_copy, (ID3D11Resource *)back);
+    ID3D11Texture2D_Release(back);
+
+    ID3D11VertexShader *old_vs = NULL; ID3D11PixelShader *old_ps = NULL; ID3D11Buffer *old_cb = NULL;
+    ID3D11InputLayout *old_layout = NULL; ID3D11RasterizerState *old_raster = NULL;
+    ID3D11ShaderResourceView *old_srv = NULL, *null_srv = NULL;
+    ID3D11BlendState *old_blend = NULL; ID3D11DepthStencilState *old_depth = NULL;
+    D3D11_PRIMITIVE_TOPOLOGY old_topology;
+    D3D11_VIEWPORT old_viewports[D3D11_VIEWPORT_AND_SCISSORRECT_OBJECT_COUNT_PER_PIPELINE];
+    UINT old_viewport_count = D3D11_VIEWPORT_AND_SCISSORRECT_OBJECT_COUNT_PER_PIPELINE;
+    FLOAT old_blend_factor[4]; UINT old_sample_mask, old_stencil_ref;
+    D3D11_VIEWPORT full = {0};
+    float constants[4] = {exponent, sharpen, 0.f, 0.f};
+    ID3D11DeviceContext_VSGetShader(ctx, &old_vs, NULL, NULL);
+    ID3D11DeviceContext_PSGetShader(ctx, &old_ps, NULL, NULL);
+    ID3D11DeviceContext_PSGetConstantBuffers(ctx, 0, 1, &old_cb);
+    ID3D11DeviceContext_IAGetInputLayout(ctx, &old_layout);
+    ID3D11DeviceContext_IAGetPrimitiveTopology(ctx, &old_topology);
+    ID3D11DeviceContext_RSGetState(ctx, &old_raster);
+    ID3D11DeviceContext_RSGetViewports(ctx, &old_viewport_count, old_viewports);
+    ID3D11DeviceContext_PSGetShaderResources(ctx, 0, 1, &old_srv);
+    ID3D11DeviceContext_OMGetBlendState(ctx, &old_blend, old_blend_factor, &old_sample_mask);
+    ID3D11DeviceContext_OMGetDepthStencilState(ctx, &old_depth, &old_stencil_ref);
+
+    ID3D11DeviceContext_UpdateSubresource(ctx, (ID3D11Resource *)g_brightness_cb, 0, NULL, constants, 0, 0);
+    full.Width = (FLOAT)desc.Width; full.Height = (FLOAT)desc.Height; full.MaxDepth = 1.0f;
+    ID3D11DeviceContext_PSSetShaderResources(ctx, 0, 1, &null_srv);
+    ID3D11DeviceContext_OMSetRenderTargets(ctx, 1, &g_device_state.default_rtv, NULL);
+    ID3D11DeviceContext_OMSetBlendState(ctx, NULL, NULL, ~0u);
+    ID3D11DeviceContext_OMSetDepthStencilState(ctx, NULL, 0u);
+    ID3D11DeviceContext_RSSetState(ctx, NULL);
+    ID3D11DeviceContext_RSSetViewports(ctx, 1, &full);
+    ID3D11DeviceContext_IASetInputLayout(ctx, NULL);
+    ID3D11DeviceContext_IASetPrimitiveTopology(ctx, D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+    ID3D11DeviceContext_VSSetShader(ctx, g_device_state.resolve_vs, NULL, 0);
+    ID3D11DeviceContext_PSSetShader(ctx, g_brightness_ps, NULL, 0);
+    ID3D11DeviceContext_PSSetConstantBuffers(ctx, 0, 1, &g_brightness_cb);
+    ID3D11DeviceContext_PSSetShaderResources(ctx, 0, 1, &g_brightness_srv);
+    ID3D11DeviceContext_Draw(ctx, 3, 0);
+
+    ID3D11DeviceContext_PSSetShaderResources(ctx, 0, 1, &null_srv);
+    ID3D11DeviceContext_OMSetRenderTargets(ctx, 1, &g_device_state.current_rtv, g_device_state.current_dsv);
+    ID3D11DeviceContext_VSSetShader(ctx, old_vs, NULL, 0);
+    ID3D11DeviceContext_PSSetShader(ctx, old_ps, NULL, 0);
+    ID3D11DeviceContext_PSSetConstantBuffers(ctx, 0, 1, &old_cb);
+    ID3D11DeviceContext_IASetInputLayout(ctx, old_layout);
+    ID3D11DeviceContext_IASetPrimitiveTopology(ctx, old_topology);
+    ID3D11DeviceContext_RSSetState(ctx, old_raster);
+    if (old_viewport_count) ID3D11DeviceContext_RSSetViewports(ctx, old_viewport_count, old_viewports);
+    ID3D11DeviceContext_PSSetShaderResources(ctx, 0, 1, &old_srv);
+    ID3D11DeviceContext_OMSetBlendState(ctx, old_blend, old_blend_factor, old_sample_mask);
+    ID3D11DeviceContext_OMSetDepthStencilState(ctx, old_depth, old_stencil_ref);
+    if (old_vs) ID3D11VertexShader_Release(old_vs);
+    if (old_ps) ID3D11PixelShader_Release(old_ps);
+    if (old_cb) ID3D11Buffer_Release(old_cb);
+    if (old_layout) ID3D11InputLayout_Release(old_layout);
+    if (old_raster) ID3D11RasterizerState_Release(old_raster);
+    if (old_srv) ID3D11ShaderResourceView_Release(old_srv);
+    if (old_blend) ID3D11BlendState_Release(old_blend);
+    if (old_depth) ID3D11DepthStencilState_Release(old_depth);
+}
+
 /* Host diagnostics use premultiplied alpha; retail video remains opaque. */
 BOOL d3d8_CompositeHostOverlay(const void *pixels, UINT width, UINT height,
     UINT x, UINT y, UINT logical_width, UINT logical_height)
@@ -3237,6 +3404,7 @@ static ULONG __stdcall dev_Release(IDirect3DDevice8 *self)
 
         /* Cleanup D3D11 resources */
         D3D8DeviceState *s = &g_device_state;
+        d3d8_release_present_brightness();
         if (s->pvideo_srv) { ID3D11ShaderResourceView_Release(s->pvideo_srv); s->pvideo_srv = NULL; }
         if (s->pvideo_texture) { ID3D11Texture2D_Release(s->pvideo_texture); s->pvideo_texture = NULL; }
         if (s->pvideo_cb) { ID3D11Buffer_Release(s->pvideo_cb); s->pvideo_cb = NULL; }

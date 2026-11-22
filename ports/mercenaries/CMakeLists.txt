@@ -72,6 +72,7 @@ set(GAME_SOURCES
     src/recomp_prompts.c
     src/recomp_options_menu.c
     src/dev_menu.c
+    src/cheat_menu.c
     src/dev_missions.c
     src/dev_overlay.c
     src/free_cam.c

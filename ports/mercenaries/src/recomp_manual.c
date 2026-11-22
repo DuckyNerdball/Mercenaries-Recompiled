@@ -3347,15 +3347,17 @@ void recomp_options_paint_fov_slider(uint32_t brush, float start_y, float row_he
     recomp_func_t box = recomp_lookup(0x0020A1C0u);
     if (!begin || !box) return;
     for (unsigned row = 0; row < count; ++row) {
-        if (guest_u32(brush + 0x40u + row * 4u) != RECOMP_OPTIONS_FOV_HASH) continue;
+        const uint32_t row_hash = guest_u32(brush + 0x40u + row * 4u);
+        if (row_hash != RECOMP_OPTIONS_FOV_HASH && row_hash != RECOMP_OPTIONS_BRIGHTNESS_HASH) continue;
         float per = *(float *)guest_ptr(brush + 0xC8u);
         float fade = per > 0.f ? (*(float *)guest_ptr(brush + 0xC4u) -
                      *(float *)guest_ptr(brush + 0x80u + row * 4u)) / per : 1.f;
-        if (!(fade > 0.f)) return;
+        if (!(fade > 0.f)) continue;
         if (fade > 1.f) fade = 1.f;
         const float left = 190.f, width = 110.f, thumb = 4.f;
         const float y = start_y + row_height * row + *(float *)guest_ptr(0x351F58u);
-        const float position = recomp_options_fov_slider_position();
+        const float position = row_hash == RECOMP_OPTIONS_FOV_HASH ?
+            recomp_options_fov_slider_position() : recomp_options_brightness_slider_position();
         recomp_saved_guest_cpu_context saved;
         recomp_save_guest_cpu_context(&saved);
         for (unsigned part = 0; part < 2u; ++part) {
@@ -3374,7 +3376,6 @@ void recomp_options_paint_fov_slider(uint32_t brush, float start_y, float row_he
             recomp_guest_push_u32(0); g_ecx = brush; box();
         }
         recomp_restore_guest_cpu_context(&saved);
-        return;
     }
 }
 
@@ -3390,6 +3391,7 @@ float recomp_options_camera_fov(uint32_t camera, float fov)
 #include "dev_spawn.h"
 #include "dev_battle_guest.h"
 #include "dev_factions_guest.h"
+#include "dev_cheats_guest.h"
 #include "dev_mission_guest.h"
 #include "mod_gameplay_guest.h"
 #include "boids_guest.h"
@@ -7691,6 +7693,8 @@ uint32_t recomp_xinput_get_state(uint32_t handle, uint32_t state_address)
         recomp_arm_game_stall_watchdog();
     memset(&state, 0, sizeof(state));
     result = xbox_InputGetState(port, &state);
+    if (port == 0u)
+        dev_cheat_filter_pad(&state, now);
     if (port == 0u) {
         xbox_InputApplyTestExactLoadGame(&state);
         recomp_apply_test_survivor_flash();

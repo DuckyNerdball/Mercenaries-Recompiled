@@ -36,6 +36,10 @@ IDXGISwapChain      *d3d8_GetSwapChain(void);
 ID3D11RenderTargetView *d3d8_GetDefaultRTV(void);
 HWND                 d3d8_GetHWND(void);
 void d3d8_SetHostOverlayCallback(void (*callback)(void));
+/* Returns the present-time gamma exponent (1.0 = pass skipped). */
+void d3d8_SetPresentBrightnessCallback(float (*callback)(void));
+/* Returns contrast-adaptive sharpening strength 0..1 (0 = off). */
+void d3d8_SetPresentSharpenCallback(float (*callback)(void));
 UINT                 d3d8_GetBackbufferWidth(void);
 UINT                 d3d8_GetBackbufferHeight(void);
 UINT                 d3d8_GetRenderTargetWidth(void);

@@ -4,6 +4,7 @@
 #include "dev_weapons.h"
 #include "dev_factions.h"
 #include "free_cam.h"
+#include "cheat_menu.h"
 static uint32_t dev_spawn_serial;
 static uint32_t dev_last_spawn_guid;
 static int dev_region_import_active;
@@ -281,6 +282,49 @@ static int dev_test_take_spawn(unsigned *index)
     xbox_preview_log_event("dev-test-request", "sequence=%lu rejected unknown template=%s", sequence, name);
     return 0;
 }
+/* Warzone queue: dev spawn requests with an explicit origin and facing, fed by
+ * the Cheats page (tank field / assault / ambush waves). One request runs per
+ * tick through the normal spawner below, with dev_spawn_override replacing the
+ * player/camera origin. */
+typedef struct { unsigned index; float at[3]; float face[2]; } DevWarzoneStep;
+#define DEV_WZ_SLOTS 64u
+static DevWarzoneStep dev_wz_queue[DEV_WZ_SLOTS];
+static unsigned dev_wz_head, dev_wz_tail, dev_wz_made, dev_wz_tried;
+static int dev_spawn_override;
+static float dev_spawn_override_at[3], dev_spawn_override_face[2];
+static unsigned dev_wz_pending(void){return dev_wz_tail-dev_wz_head;}
+static int dev_wz_push(unsigned index,const float *at,float fx,float fz)
+{
+    if(dev_wz_pending()>=DEV_WZ_SLOTS)return 0;
+    DevWarzoneStep *step=&dev_wz_queue[dev_wz_tail%DEV_WZ_SLOTS];
+    step->index=index;memcpy(step->at,at,12);step->face[0]=fx;step->face[1]=fz;
+    dev_wz_tail++;
+    return 1;
+}
+static int dev_wz_take(unsigned *index)
+{
+    if(!dev_wz_pending())return 0;
+    DevWarzoneStep *step=&dev_wz_queue[dev_wz_head%DEV_WZ_SLOTS];
+    dev_wz_head++;
+    *index=step->index;
+    memcpy(dev_spawn_override_at,step->at,12);
+    dev_spawn_override_face[0]=step->face[0];dev_spawn_override_face[1]=step->face[1];
+    dev_spawn_override=1;
+    return 1;
+}
+static int dev_find_vehicle(const char *template_name)
+{
+    for(unsigned i=0;i<recomp_dev_vehicle_count();i++)
+        if(!strcmp(recomp_dev_vehicle_at(i)->template_name,template_name))return (int)i;
+    return -1;
+}
+static int dev_find_troop(const char *template_name)
+{
+    for(unsigned i=0;i<recomp_dev_troop_count();i++)
+        if(!strcmp(recomp_dev_troop_at(i)->template_name,template_name))return (int)i;
+    return -1;
+}
+
 void recomp_dev_spawn_tick(void)
 {
     static int executing;
@@ -288,7 +332,13 @@ void recomp_dev_spawn_tick(void)
     if(executing)return;
     recomp_dev_battle_refresh_player();
     recomp_dev_relations_tick();
-    if(!recomp_dev_take_spawn(&index)&&!dev_test_take_spawn(&index))return;
+    recomp_dev_cheat_tick();
+    dev_spawn_override=0;
+    int from_warzone=0;
+    if(!recomp_dev_take_spawn(&index)&&!dev_test_take_spawn(&index)){
+        if(!dev_wz_take(&index))return;
+        from_warzone=1;
+    }
     if(index==0x7fffffffu){dev_inspect_spawn();return;}
     unsigned troop=(index&DEV_SPAWN_TROOP)!=0, crew=(index>>DEV_SPAWN_CREW_SHIFT)&3u;
     unsigned crew_faction=(index>>DEV_SPAWN_FACTION_SHIFT)&7u;
@@ -361,8 +411,11 @@ void recomp_dev_spawn_tick(void)
     uint32_t player_arg[]={0x660E4490u};
     uint32_t player=dev_call(stack,0x8C7E0,0,1,player_arg);
     if(!dev_guest_address(player,0x76C)) {result="Player is not ready.";goto done;}
-    int camera_spawn=recomp_freecam_enabled();
-    if(camera_spawn){
+    int camera_spawn=dev_spawn_override||recomp_freecam_enabled();
+    if(dev_spawn_override){
+        memcpy(origin,dev_spawn_override_at,12);
+        direction[0]=dev_spawn_override_face[0];direction[1]=0;direction[2]=dev_spawn_override_face[1];
+    }else if(camera_spawn){
         if(!recomp_freecam_focus(origin,direction)){result="Free camera is not ready.";goto done;}
     }else{
         uint32_t vtable=guest_u32(player);
@@ -384,7 +437,7 @@ void recomp_dev_spawn_tick(void)
         float distance=vehicle->radius+occupied_radius+2.0f+attempt*4.0f+(float)(unit/4u)*3.0f;
         float start[3]={origin[0]+direction[0]*distance,origin[1]+15.0f,origin[2]+direction[2]*distance};
         if(troop){float side=((float)(unit%4u)-1.5f)*2.0f;start[0]+=direction[2]*side;start[2]-=direction[0]*side;}
-        float end[3]={start[0],origin[1]-(camera_spawn?300.0f:100.0f),start[2]},hit[3];
+        float end[3]={start[0],origin[1]-(camera_spawn?2000.0f:100.0f),start[2]},hit[3];
         if(!dev_ray(stack,ray,start,end,hit)||!isfinite(hit[1])||(!camera_spawn && fabsf(hit[1]-origin[1])>30.0f))continue;
         /* Sample the authored footprint before constructing any actor. Tall
          * obstacles and uneven support reject the placement instead of embedding
@@ -469,6 +522,7 @@ void recomp_dev_spawn_tick(void)
     char batch_result[160];
     if(troop){snprintf(batch_result,sizeof(batch_result),"Spawned %u / %u soldiers. Use open ground for larger groups.",created,requested);result=batch_result;}
 done:
+    if(from_warzone){dev_wz_tried++;if(success)dev_wz_made++;}
     recomp_restore_guest_cpu_context(&saved);executing=0;
     xbox_preview_log_event("dev-spawn","template=%s actor=%08X success=%d origin=(%.3f,%.3f,%.3f) spawn=(%.3f,%.3f,%.3f) radius=%.3f result=%s",vehicle->template_name,actor,success,origin[0],origin[1],origin[2],destination[0],destination[1],destination[2],vehicle->radius,result);
     if(getenv("MERCENARIES_TEST_GAMEPAD_FILE")){
@@ -479,5 +533,5 @@ done:
             if(report){fprintf(report,"success=%d created=%u template=%s actor=%08X\n%s\n",success,created,vehicle->template_name,actor,result);fclose(report);}
         }
     }
-    recomp_dev_spawn_result(success,result);
+    if(!from_warzone)recomp_dev_spawn_result(success,result);
 }

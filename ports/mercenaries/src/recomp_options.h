@@ -12,6 +12,11 @@ int recomp_acknowledgements_active(void);
 #define RECOMP_OPTIONS_FOV_MAX 100
 #define RECOMP_OPTIONS_FOV_DEFAULT 55
 #define RECOMP_OPTIONS_VSYNC_HASH      0x52430010u
+#define RECOMP_OPTIONS_BRIGHTNESS_HASH 0x52430012u
+#define RECOMP_OPTIONS_BRIGHTNESS_MIN 50
+#define RECOMP_OPTIONS_BRIGHTNESS_MAX 150
+#define RECOMP_OPTIONS_BRIGHTNESS_DEFAULT 100
+#define RECOMP_OPTIONS_BRIGHTNESS_STEP 5
 #define RECOMP_OPTIONS_FPS_HASH        0x52430001u
 #define RECOMP_OPTIONS_ASPECT_HASH     0x52430002u
 #define RECOMP_OPTIONS_DISTANCE_HASH   0x52430003u
@@ -43,7 +48,8 @@ enum recomp_options_change {
     RECOMP_OPTIONS_CHANGE_OG_BUGS = 1u << 12,
     RECOMP_OPTIONS_CHANGE_PS2_UPGRADES = 1u << 13,
     RECOMP_OPTIONS_CHANGE_VSYNC = 1u << 14,
-    RECOMP_OPTIONS_CHANGE_FOV = 1u << 15
+    RECOMP_OPTIONS_CHANGE_FOV = 1u << 15,
+    RECOMP_OPTIONS_CHANGE_BRIGHTNESS = 1u << 16
 };
 typedef void (*recomp_options_apply_callback)(uint32_t changes);
 typedef enum recomp_display_mode {
@@ -66,6 +72,15 @@ int recomp_options_adjust(uint32_t hash, int direction);
 int recomp_options_fps_cap(void); /* 30, 60, 90, 120, or 0 (uncapped). */
 int recomp_options_vsync(void);
 float recomp_options_fov_slider_position(void);
+float recomp_options_brightness_slider_position(void);
+/* Present-time gamma exponent; follows the slider live while the menu is open
+ * (pending == applied outside the menu). 1.0 means the pass is skipped. */
+float recomp_options_brightness_exponent(void);
+/* Present-time sharpening (F9 > Cheats > Picture). Levels 0..3 = Off/Low/Medium/High,
+ * persisted as Sharpen in [RecompOptions]; strength() is the 0..1 shader value. */
+int recomp_options_sharpen_level(void);
+void recomp_options_set_sharpen_level(int level);
+float recomp_options_sharpen_strength(void);
 float recomp_options_scale_fov(float horizontal_fov);
 int recomp_options_aspect_ratio(void);
 int recomp_options_draw_distance(void);

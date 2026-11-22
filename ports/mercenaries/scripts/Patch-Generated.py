@@ -14301,6 +14301,15 @@ PATCHES += (
         'loc_001EE84D: ;\n    esp = esp + 4;\n    { int recomp_freecam_world_secondary(void);\n      if(recomp_freecam_world_secondary())goto loc_001EE85A; }\n    ecx = 0x63DCD0;'),
 )
 
+PATCHES += (
+    GeneratedPatch("Activation range scales hibernation distance",
+        'loc_001EC2F6: ;\n    ecx = (uint32_t)(int32_t)SMEM16(esi + 0x2C);\n    edx = ecx;\n    edx = (uint32_t)((int32_t)edx * (int32_t)ecx);\n    xmm2 = (float)(int32_t)edx; /* cvtsi2ss */\n    xmm2 = xmm2 * xmm0; /* mulss */',
+        'loc_001EC2F6: ;\n    ecx = (uint32_t)(int32_t)SMEM16(esi + 0x2C);\n    edx = ecx;\n    edx = (uint32_t)((int32_t)edx * (int32_t)ecx);\n    xmm2 = (float)(int32_t)edx; /* cvtsi2ss */\n    xmm2 = xmm2 * xmm0; /* mulss */\n    { float recomp_activation_scale_sq(void); xmm2 = xmm2 * recomp_activation_scale_sq(); }'),
+    GeneratedPatch("Activation range scales preload distance",
+        'loc_001EC371: ;\n    ecx = (uint32_t)(int32_t)SMEM16(esi + 0x2E);\n    edx = ecx;\n    edx = (uint32_t)((int32_t)edx * (int32_t)ecx);\n    xmm2 = (float)(int32_t)edx; /* cvtsi2ss */\n    xmm2 = xmm2 * xmm0; /* mulss */',
+        'loc_001EC371: ;\n    ecx = (uint32_t)(int32_t)SMEM16(esi + 0x2E);\n    edx = ecx;\n    edx = (uint32_t)((int32_t)edx * (int32_t)ecx);\n    xmm2 = (float)(int32_t)edx; /* cvtsi2ss */\n    xmm2 = xmm2 * xmm0; /* mulss */\n    { float recomp_activation_scale_sq(void); xmm2 = xmm2 * recomp_activation_scale_sq(); }'),
+)
+
 PATCHES += (GeneratedPatch("Free Cam final rendered matrix",'loc_00099429: ;\n    ecx = MEM32(esi + 0x1C);','loc_00099429: ;\n    { void recomp_freecam_camera(uint32_t,uint32_t,float);\n      recomp_freecam_camera(esi,esp + 0x20u,MEMF(ebp + 8u)); }\n    ecx = MEM32(esi + 0x1C);'),)
 
 PATCHES += (GeneratedPatch("Discard stale mapped joystick events after context changes",'    RECOMP_TRACE_FUNC(0x000A3AD0u);\n\nloc_000A3AD0: ;','    RECOMP_TRACE_FUNC(0x000A3AD0u);\n    { int recomp_controls_event_current(uint32_t,uint32_t,uint32_t,uint32_t);\n      if(!recomp_controls_event_current(MEM32(0x413F6Cu),MEM32(0x413F68u),MEM32(0x323ACCu),MEM32(0x323AD0u))){\n          eax=0;esp+=12;return; /* consume stale event, ret 8 */\n      } }\n\nloc_000A3AD0: ;'),)

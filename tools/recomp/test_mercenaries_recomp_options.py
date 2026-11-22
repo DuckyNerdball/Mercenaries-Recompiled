@@ -36,7 +36,7 @@ def test_requested_menu_shape_and_placement() -> None:
     assert "MENU_MAIN_HASH" in MENU and "MENU_PAUSE_HASH" in MENU
     assert "MENU_SHELL_OPTIONS_HASH" in MENU
     assert "insert_item_before(menu,RECOMP_OPTIONS_MENU_HASH,0x00DFD9ADu)" in MENU
-    assert "OPTIONS_ITEM_COUNT 15u" in MENU
+    assert "OPTIONS_ITEM_COUNT 16u" in MENU
     assert "RECOMP_OPTIONS_PS2_UPGRADES_HASH" in MENU
     assert "RECOMP_OPTIONS_BOIDS_HASH" not in MENU
     assert "RECOMP_OPTIONS_OBJECT_DISTANCE_HASH" not in MENU

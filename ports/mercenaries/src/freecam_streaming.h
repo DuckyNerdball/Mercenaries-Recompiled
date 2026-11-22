@@ -18,7 +18,8 @@ int recomp_freecam_stream_keep(uint32_t spore,int preloading) {
     /* Match retail 001EC2A0/001EC320, including hysteresis and strictness. */
     uint32_t factor=preloading ? ((flags&0x100)?0x2E4060u:0x2DC08Cu)
                               : ((flags&8)?0x2DC08Cu:0x2E4060u);
-    float limit=(float)(distance*distance) * *(const float*)guest_ptr(factor);
+    float recomp_activation_scale_sq(void);
+    float limit=(float)(distance*distance) * *(const float*)guest_ptr(factor) * recomp_activation_scale_sq();
     float squared=dx*dx+dz*dz;
     return preloading ? squared<limit : squared<=limit;
 }

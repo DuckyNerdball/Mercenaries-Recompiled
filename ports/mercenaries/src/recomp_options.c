@@ -11,7 +11,8 @@
 
 typedef struct recomp_option_values {
     int fps_cap, vsync, fov, aspect, resolution, anisotropic, display, haze,
-        wake_distance, npc_draw_distance, npc_lod, fixed_xbox_prompts, object_distance, og_bugs, ps2_upgrades;
+        wake_distance, npc_draw_distance, npc_lod, fixed_xbox_prompts, object_distance, og_bugs, ps2_upgrades,
+        brightness;
 } recomp_option_values;
 
 typedef struct recomp_options_state {
@@ -49,6 +50,7 @@ static void write_all_settings(void) {
     write_setting("60FPS", g_options.applied.fps_cap != 0); /* older-build rollback */
     write_setting("FOV", g_options.applied.fov);
     write_setting("VSync", g_options.applied.vsync);
+    write_setting("Brightness", g_options.applied.brightness);
     write_setting("AspectRatio", g_options.applied.aspect);
     write_setting("DrawDistance", 0); /* Clear legacy overrides when settings are saved. */
     write_setting("ResolutionScale", g_options.applied.resolution);
@@ -101,6 +103,10 @@ void recomp_options_init(void) {
     loaded.fov = (int)GetPrivateProfileIntA("RecompOptions", "FOV", RECOMP_OPTIONS_FOV_DEFAULT, g_options.path);
     if (loaded.fov < RECOMP_OPTIONS_FOV_MIN) loaded.fov = RECOMP_OPTIONS_FOV_MIN;
     if (loaded.fov > RECOMP_OPTIONS_FOV_MAX) loaded.fov = RECOMP_OPTIONS_FOV_MAX;
+    loaded.brightness = (int)GetPrivateProfileIntA("RecompOptions", "Brightness", RECOMP_OPTIONS_BRIGHTNESS_DEFAULT, g_options.path);
+    loaded.brightness = RECOMP_OPTIONS_BRIGHTNESS_MIN + clamp_setting(loaded.brightness - RECOMP_OPTIONS_BRIGHTNESS_MIN,
+        RECOMP_OPTIONS_BRIGHTNESS_MAX - RECOMP_OPTIONS_BRIGHTNESS_MIN);
+    loaded.brightness -= (loaded.brightness - RECOMP_OPTIONS_BRIGHTNESS_MIN) % RECOMP_OPTIONS_BRIGHTNESS_STEP;
     loaded.vsync = clamp_setting(GetPrivateProfileIntA("RecompOptions", "VSync", 0, g_options.path), 1);
     loaded.aspect = clamp_setting(GetPrivateProfileIntA("RecompOptions", "AspectRatio", 0, g_options.path), 3);
     /* Legacy DrawDistance is deliberately ignored: the retail terrain cache
@@ -157,6 +163,7 @@ static uint32_t changed_options(void) {
     if (g_options.pending.object_distance != g_options.applied.object_distance) changes |= RECOMP_OPTIONS_CHANGE_OBJECT_DISTANCE;
     if (g_options.pending.fps_cap != g_options.applied.fps_cap) changes |= RECOMP_OPTIONS_CHANGE_FPS;
     if (g_options.pending.vsync != g_options.applied.vsync) changes |= RECOMP_OPTIONS_CHANGE_VSYNC;
+    if (g_options.pending.brightness != g_options.applied.brightness) changes |= RECOMP_OPTIONS_CHANGE_BRIGHTNESS;
     if (g_options.pending.aspect != g_options.applied.aspect) changes |= RECOMP_OPTIONS_CHANGE_ASPECT;
     if (g_options.pending.resolution != g_options.applied.resolution) changes |= RECOMP_OPTIONS_CHANGE_RESOLUTION;
     if (g_options.pending.anisotropic != g_options.applied.anisotropic) changes |= RECOMP_OPTIONS_CHANGE_AF;
@@ -198,6 +205,12 @@ int recomp_options_adjust(uint32_t hash, int direction) {
     case RECOMP_OPTIONS_ASPECT_HASH: g_options.pending.aspect = cycle(g_options.pending.aspect, 3, direction); return 1;
     case RECOMP_OPTIONS_RESOLUTION_HASH: g_options.pending.resolution = cycle(g_options.pending.resolution, 5, direction); return 1;
     case RECOMP_OPTIONS_VSYNC_HASH: g_options.pending.vsync ^= 1; return 1;
+    case RECOMP_OPTIONS_BRIGHTNESS_HASH:
+        g_options.pending.brightness = RECOMP_OPTIONS_BRIGHTNESS_MIN + clamp_setting(
+            g_options.pending.brightness - RECOMP_OPTIONS_BRIGHTNESS_MIN +
+            (direction < 0 ? -RECOMP_OPTIONS_BRIGHTNESS_STEP : RECOMP_OPTIONS_BRIGHTNESS_STEP),
+            RECOMP_OPTIONS_BRIGHTNESS_MAX - RECOMP_OPTIONS_BRIGHTNESS_MIN);
+        return 1;
     case RECOMP_OPTIONS_AF_HASH: g_options.pending.anisotropic ^= 1; return 1;
     case RECOMP_OPTIONS_DISPLAY_HASH: g_options.pending.display = cycle(g_options.pending.display, 2, direction); return 1;
     case RECOMP_OPTIONS_HAZE_HASH: g_options.pending.haze = cycle(g_options.pending.haze, 2, direction); return 1;
@@ -239,6 +252,7 @@ const char *recomp_options_label(uint32_t hash) {
     case RECOMP_OPTIONS_FOV_HASH: _snprintf_s(label, sizeof(label), _TRUNCATE, "FOV (4:3): %d", g_options.pending.fov); break;
     case RECOMP_OPTIONS_FPS_HASH: _snprintf_s(label, sizeof(label), _TRUNCATE, "FPS CAP: %s", g_fps_cap_labels[g_options.pending.fps_cap]); break;
     case RECOMP_OPTIONS_VSYNC_HASH: _snprintf_s(label, sizeof(label), _TRUNCATE, "V-SYNC: %s", g_options.pending.vsync ? "ON" : "OFF"); break;
+    case RECOMP_OPTIONS_BRIGHTNESS_HASH: _snprintf_s(label, sizeof(label), _TRUNCATE, "BRIGHTNESS: %d%%", g_options.pending.brightness); break;
     case RECOMP_OPTIONS_ASPECT_HASH: _snprintf_s(label, sizeof(label), _TRUNCATE, "ASPECT RATIO: %s", aspects[g_options.pending.aspect]); break;
     case RECOMP_OPTIONS_RESOLUTION_HASH: _snprintf_s(label, sizeof(label), _TRUNCATE, "RESOLUTION SCALE: %s", resolutions[g_options.pending.resolution]); break;
     case RECOMP_OPTIONS_AF_HASH: _snprintf_s(label, sizeof(label), _TRUNCATE, "ANISOTROPIC FILTERING: %s", g_options.pending.anisotropic ? "16X" : "OFF"); break;
@@ -265,6 +279,7 @@ uint32_t recomp_options_localization_hash(uint32_t hash) {
     case RECOMP_OPTIONS_FOV_HASH:
     case RECOMP_OPTIONS_FPS_HASH:
     case RECOMP_OPTIONS_VSYNC_HASH:
+    case RECOMP_OPTIONS_BRIGHTNESS_HASH:
     case RECOMP_OPTIONS_ASPECT_HASH:
     case RECOMP_OPTIONS_RESOLUTION_HASH:
     case RECOMP_OPTIONS_AF_HASH:
@@ -412,6 +427,38 @@ float recomp_options_scale_object_distance(float distance, uint32_t type) {
         return distance * recomp_options_object_distance_multiplier();
     default: return distance;
     }
+}
+float recomp_options_brightness_slider_position(void) {
+    recomp_options_init();
+    return (float)(g_options.pending.brightness - RECOMP_OPTIONS_BRIGHTNESS_MIN) /
+           (float)(RECOMP_OPTIONS_BRIGHTNESS_MAX - RECOMP_OPTIONS_BRIGHTNESS_MIN);
+}
+float recomp_options_brightness_exponent(void) {
+    if (!g_options.initialized) return 1.0f;
+    /* 150% -> 0.5 (lifts shadows/mids), 100% -> 1, 50% -> 2. Black and white
+     * stay fixed, so highlights never clip the way a linear gain would. */
+    return powf(2.0f, (float)(RECOMP_OPTIONS_BRIGHTNESS_DEFAULT - g_options.pending.brightness) / 50.0f);
+}
+static volatile LONG g_sharpen_level = -1;
+int recomp_options_sharpen_level(void) {
+    LONG level = InterlockedCompareExchange(&g_sharpen_level, -1, -1);
+    if (level < 0) {
+        recomp_options_init();
+        level = clamp_setting(GetPrivateProfileIntA("RecompOptions", "Sharpen", 0, g_options.path), 3);
+        InterlockedExchange(&g_sharpen_level, level);
+    }
+    return (int)level;
+}
+void recomp_options_set_sharpen_level(int level) {
+    recomp_options_init();
+    level = clamp_setting(level, 3);
+    InterlockedExchange(&g_sharpen_level, level);
+    write_setting("Sharpen", level);
+}
+float recomp_options_sharpen_strength(void) {
+    static const float strengths[] = { 0.0f, 0.35f, 0.65f, 1.0f };
+    if (!g_options.initialized) return 0.0f;
+    return strengths[recomp_options_sharpen_level()];
 }
 float recomp_options_fov_slider_position(void) {
     recomp_options_init();

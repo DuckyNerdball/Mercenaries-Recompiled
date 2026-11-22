@@ -1065,6 +1065,10 @@ static BOOL host_graphics_init(HINSTANCE instance, int show_command)
     recomp_dev_menu_init(g_host_window, dev_bookmark);
     recomp_dev_menu_set_display_callback(host_dev_display);
     recomp_dev_overlay_init();
+    { extern void d3d8_SetPresentBrightnessCallback(float (*)(void));
+      d3d8_SetPresentBrightnessCallback(recomp_options_brightness_exponent);
+      extern void d3d8_SetPresentSharpenCallback(float (*)(void));
+      d3d8_SetPresentSharpenCallback(recomp_options_sharpen_strength); }
     g_host_ready=1;
     recomp_controls_init(g_host_window);
     ShowWindow(g_host_window,
