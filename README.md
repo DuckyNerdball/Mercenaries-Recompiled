@@ -18,6 +18,25 @@ game executable. A PS2 disc is not a substitute for the Xbox build input.
 [Contributing](CONTRIBUTING.md) ·
 [Dependencies and licenses](docs/dependencies.md)
 
+## Cheat-menu build (this fork)
+
+This is **DuckyNerdball's fork**, branch `cheat-menu`, of
+[KraftMacAndChee/Mercenaries-Recompiled](https://github.com/KraftMacAndChee/Mercenaries-Recompiled).
+It adds to the F9 developer panel (L3 + R3 on a controller):
+
+- **Cheats page**: god mode, infinite ammo, money, shop and cheat-code unlocks, 15 outfits,
+  weapon/pickup drops, faction friendly/hostile, infinite money, NPC density x1–x3.
+- **Airstrikes anywhere**: 23 strikes (including unused dev "killbox" and cut aircraft) called at
+  your crosshair on foot, driving or flying — hold **LB + click R3** or press **F7**, **LB + D-pad** to pick.
+- **Warzone**: hostile tank fields, armored assaults, infantry companies and fuel depots at your
+  crosshair, plus optional ambush waves.
+- **Deck of 52**: load card NPC camps on demand.
+- **Wake-up range** x1–x4 for NPCs, vehicles and camps; Free Cam strikes and spawns.
+- **Brightness** slider and **sharpening** in Recomp Options.
+
+Full feature list, controls, test status, known issues and changed files:
+**[docs/CHEAT_MENU.md](docs/CHEAT_MENU.md)**. Same rules as upstream: source only, bring your own game.
+
 ## What is in this repository?
 
 This is the maintained source, translation tooling, tests, documentation, and
