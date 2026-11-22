@@ -65,7 +65,8 @@
   },
   "start": {
     "program": [
-      "Game/Mercenaries Recompiled.exe"
+      "Game/Mercenaries Recompiled.exe",
+      "Install.cmd"
     ]
   },
   "folders": {
@@ -80,9 +81,8 @@
       }
     ]
   },
-  "system": {
-    "windows": {
-      "version": "10"
-    }
-  }
+  "saves": [
+    "{install}/Game/saves",
+    "{install}/Game/mod-saves"
+  ]
 }
