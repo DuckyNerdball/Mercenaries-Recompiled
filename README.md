@@ -1,5 +1,7 @@
 # Mercenaries Recompiled — Cheat-Menu Build
 
+<a href="https://recomplauncher.com"><picture><source media="(prefers-color-scheme: dark)" srcset="https://recomplauncher.com/assets/press/launcher/badge-light.svg"><img alt="Get it on RecompLauncher" src="https://recomplauncher.com/assets/press/launcher/badge-dark.svg" height="48"></picture></a>
+
 A fork of [KraftMacAndChee/Mercenaries-Recompiled](https://github.com/KraftMacAndChee/Mercenaries-Recompiled),
 the native Windows port of **Mercenaries: Playground of Destruction** (Xbox), with a full cheat
 menu, airstrikes you can call anywhere, a warzone spawner and extra image options.
@@ -36,7 +38,10 @@ The panel needs `developer_menu=1` in `developer.ini` next to the game.
 
 ## Install (easiest)
 
-Download **MercenariesCheatBuild-Installer** from [Releases](https://github.com/DuckyNerdball/Mercenaries-Recompiled/releases),
+**With [RecompLauncher](https://recomplauncher.com):** install it there, drop in your ISO, tick the Python and
+Visual Studio Build Tools options, and it builds and sets everything up (`recomplauncher.json` in the release).
+
+**By hand:** download **MercenariesCheatBuild-…-Windows-x64.zip** from [Releases](https://github.com/DuckyNerdball/Mercenaries-Recompiled/releases),
 extract it and run `Install.cmd`. It asks for your Xbox ISO, installs Python 3.12 and the Visual Studio 2022
 Build Tools if needed (several GB), builds the game on your PC from your own disc (20–40 minutes), and puts a
 shortcut on your desktop. The download contains only the installer script: no game code or data.

@@ -1,0 +1,88 @@
+{
+  "$schema": "https://recomplauncher.com/schema/recomplauncher.json",
+  "format": 1,
+  "name": "Mercenaries Recompiled - Cheat Build",
+  "repo": "DuckyNerdball/Mercenaries-Recompiled",
+  "min": "0.90.0-beta.64",
+  "game": {
+    "kind": "iso",
+    "label": "Your disc image (.iso or XISO) of the original Xbox USA release of Mercenaries: Playground of Destruction.",
+    "check": {
+      "xdvdfs": "default.xbe"
+    }
+  },
+  "prepare": {
+    "program": [
+      "Prepare.cmd"
+    ],
+    "args": [
+      "-IsoPath",
+      "{game}",
+      "-Branch",
+      "v0.1.1"
+    ],
+    "label": "Building the game from your disc",
+    "timeout": 7200,
+    "version": "0.1.1",
+    "done": [
+      "{install}/Game/mercenaries_recomp.exe",
+      "{install}/Game/Mercenaries Recompiled.exe"
+    ],
+    "options": [
+      {
+        "id": "python",
+        "label": "Python 3.12",
+        "note": "Needed to build the game. Installed for your user if this PC doesn't have it.",
+        "os": [
+          "windows"
+        ],
+        "required": true,
+        "args": [
+          "-AcceptPythonLicense"
+        ],
+        "license": {
+          "name": "Python Software Foundation License",
+          "url": "https://docs.python.org/3/license.html"
+        }
+      },
+      {
+        "id": "vs_build_tools",
+        "label": "Microsoft Visual Studio 2022 Build Tools",
+        "note": "Needed to build the game (MSVC 14.44 and Windows SDK 10.0.26100). Installed if missing; Windows asks for admin rights once.",
+        "os": [
+          "windows"
+        ],
+        "required": true,
+        "args": [
+          "-AcceptVsLicense"
+        ],
+        "license": {
+          "name": "Microsoft Visual Studio license terms",
+          "url": "https://visualstudio.microsoft.com/license-terms/"
+        }
+      }
+    ]
+  },
+  "start": {
+    "program": [
+      "Game/Mercenaries Recompiled.exe"
+    ]
+  },
+  "folders": {
+    "game": [
+      {
+        "path": "{install}/Game"
+      }
+    ],
+    "saves": [
+      {
+        "path": "{install}/Game/saves"
+      }
+    ]
+  },
+  "system": {
+    "windows": {
+      "version": "10"
+    }
+  }
+}

@@ -16,6 +16,9 @@ F9 panel on, and the **All Supports** / **Clear Skies** mods generated from the 
 (enabled, normal save slots), and 1920x1080 borderless unless the player already picked a resolution or display mode.
 `Install.cmd -Update` rebuilds from the latest source, keeps saves and settings, and re-ticks both mods.
 `Install.cmd -SkipBuild` reinstalls from an existing build without rebuilding.
+RecompLauncher runs the same script through `Prepare.cmd` (`recomplauncher.json` → `prepare`): no window or prompts,
+`progress` lines on stdout, build tools installed only when the player ticks their license options, source pinned to
+the release tag. Exit codes: 2 no/missing disc image, 3 build-tool license not ticked, 4 build failed, 5 wrong disc.
 
 ## Turning it on
 

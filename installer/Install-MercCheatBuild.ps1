@@ -32,7 +32,13 @@ param(
     [switch]$SkipPrereqs,
     [switch]$SkipBuild,
     [switch]$NoShortcut,
-    [switch]$NoLaunch
+    [switch]$NoLaunch,
+    # RecompLauncher's windowless setup step (recomplauncher.json "prepare"): no prompts, no
+    # shortcut, no launch, "progress <0-1> <text>" lines on stdout. Build tools are only installed
+    # when the player ticked their license options on the setup screen.
+    [switch]$Launcher,
+    [switch]$AcceptVsLicense,
+    [switch]$AcceptPythonLicense
 )
 
 $ErrorActionPreference = 'Continue'   # Windows PowerShell 5.1 turns native stderr into errors under 'Stop'
@@ -46,10 +52,22 @@ function Quote-Args([string[]]$a) {
 }
 
 function Say([string]$m, [string]$c = 'Cyan') { Write-Host $m -ForegroundColor $c }
-function Fail([string]$m) { Write-Host "`nERROR: $m" -ForegroundColor Red; Stop-Transcript | Out-Null; if ($Host.Name -eq 'ConsoleHost') { Read-Host 'Press Enter to close' | Out-Null }; exit 1 }
+function Fail([string]$m, [int]$code = 1) {
+    Write-Host "`nERROR: $m" -ForegroundColor Red
+    Stop-Transcript | Out-Null
+    if (-not $Launcher -and $Host.Name -eq 'ConsoleHost') { Read-Host 'Press Enter to close' | Out-Null }
+    exit $code
+}
+function Progress([double]$f, [string]$t) {
+    if (-not $Launcher) { return }
+    [Console]::Out.WriteLine('progress ' + $f.ToString('0.00', [Globalization.CultureInfo]::InvariantCulture) + ' ' + $t)
+    [Console]::Out.Flush()
+}
+if ($Launcher) { $NoShortcut = $true; $NoLaunch = $true }
 function Refresh-Path { $env:Path = [Environment]::GetEnvironmentVariable('Path', 'Machine') + ';' + [Environment]::GetEnvironmentVariable('Path', 'User') }
 function Has-Command([string]$n) { [bool](Get-Command $n -ErrorAction SilentlyContinue) }
 
+$InstallDir = [IO.Path]::GetFullPath($InstallDir)
 New-Item -ItemType Directory -Force -Path $InstallDir | Out-Null
 $log = Join-Path $InstallDir 'install.log'
 Start-Transcript -Path $log -Append | Out-Null
@@ -62,6 +80,7 @@ Say "Install folder: $InstallDir"
 $sourceDir = Join-Path $InstallDir 'source'
 $gameDir = Join-Path $InstallDir 'Game'
 $needIso = (-not $SkipBuild) -and ((-not $Update) -or -not (Test-Path (Join-Path $sourceDir 'game_files\mercenaries-retail\default.xbe')))
+if ($needIso -and -not $IsoPath -and $Launcher) { Fail 'No disc image was passed (-IsoPath).' 2 }
 if ($needIso -and -not $IsoPath) {
     Add-Type -AssemblyName System.Windows.Forms
     $dlg = New-Object System.Windows.Forms.OpenFileDialog
@@ -71,7 +90,7 @@ if ($needIso -and -not $IsoPath) {
     $IsoPath = $dlg.FileName
 }
 if ($needIso) {
-    if (-not (Test-Path -LiteralPath $IsoPath)) { Fail "ISO not found: $IsoPath" }
+    if (-not (Test-Path -LiteralPath $IsoPath)) { Fail "ISO not found: $IsoPath" 2 }
     $IsoPath = (Resolve-Path -LiteralPath $IsoPath).Path
     Say "ISO: $IsoPath"
 }
@@ -91,9 +110,12 @@ function Test-Sdk { Test-Path (Join-Path ${env:ProgramFiles(x86)} "Windows Kits\
 if ($SkipBuild) { $SkipPrereqs = $true }
 if (-not $SkipPrereqs) {
     Say "`n[1/5] Checking build tools..." 'Green'
+    Progress 0.02 'Checking build tools'
 
     if (-not (Test-Python312)) {
+        if ($Launcher -and -not $AcceptPythonLicense) { Fail 'Python 3.12 is needed to build the game. Tick the Python option on the setup screen.' 3 }
         Say 'Installing Python 3.12...'
+        Progress 0.04 'Installing Python 3.12'
         if (Has-Command 'winget') {
             winget install --id Python.Python.3.12 -e --silent --accept-package-agreements --accept-source-agreements
         } else {
@@ -107,6 +129,8 @@ if (-not $SkipPrereqs) {
     Say '  Python 3.12: OK'
 
     if (-not (Find-Toolset) -or -not (Test-Sdk)) {
+        if ($Launcher -and -not $AcceptVsLicense) { Fail 'Visual Studio 2022 Build Tools are needed to build the game. Tick the Build Tools option on the setup screen.' 3 }
+        Progress 0.06 'Installing Visual Studio 2022 Build Tools (large download)'
         Say "Installing Visual Studio 2022 Build Tools (MSVC $Msvc + Windows SDK $Sdk). This is a large download..."
         $boot = Join-Path $env:TEMP 'vs_BuildTools.exe'
         Invoke-WebRequest 'https://aka.ms/vs/17/release/vs_BuildTools.exe' -OutFile $boot -UseBasicParsing
@@ -130,6 +154,7 @@ if (-not $SkipPrereqs) {
 if (-not $SkipBuild) {
 # ---------------------------------------------------------------- 3. Source
 Say "`n[2/5] Getting the source ($Repo, $Branch)..." 'Green'
+Progress 0.15 'Downloading the source'
 if (Has-Command 'git') {
     if (Test-Path (Join-Path $sourceDir '.git')) {
         git -C $sourceDir fetch --depth 1 origin $Branch
@@ -142,7 +167,7 @@ if (Has-Command 'git') {
 } else {
     # Without git installed the official build simply skips its git provenance step.
     $zip = Join-Path $env:TEMP 'merc-cheat-src.zip'
-    Invoke-WebRequest "https://codeload.github.com/$Repo/zip/refs/heads/$Branch" -OutFile $zip -UseBasicParsing
+    Invoke-WebRequest "https://codeload.github.com/$Repo/zip/$Branch" -OutFile $zip -UseBasicParsing
     $tmp = Join-Path $env:TEMP 'merc-cheat-src'
     if (Test-Path $tmp) { Remove-Item $tmp -Recurse -Force }
     Expand-Archive $zip $tmp -Force
@@ -154,6 +179,7 @@ if (-not (Test-Path (Join-Path $sourceDir 'ports\mercenaries\scripts\Build-From-
 
 # ---------------------------------------------------------------- 4. Build
 Say "`n[3/5] Building from your disc. This takes 20-40 minutes; leave the window open..." 'Green'
+Progress 0.20 'Building the game from your disc (5-40 minutes)'
 $build = Join-Path $sourceDir 'ports\mercenaries\scripts\Build-From-Iso.ps1'
 $buildArgs = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $build)
 if ($needIso) { $buildArgs += @('-IsoPath', $IsoPath) }
@@ -172,13 +198,14 @@ Pop-Location
 }
 else { Say "`nSkipping the build; using the existing one in $sourceDir." 'Green'; $buildExit = 0 }
 $bin = Join-Path $sourceDir 'build\mercenaries\bin\Release'
-if ($buildExit -ne 0 -or -not (Test-Path (Join-Path $bin 'mercenaries_recomp.exe'))) { Fail "The build failed (exit $buildExit). The log is $log - open an issue on github.com/$Repo with it." }
+if ($buildExit -ne 0 -or -not (Test-Path (Join-Path $bin 'mercenaries_recomp.exe'))) { Fail "The build failed (exit $buildExit). The log is $log - open an issue on github.com/$Repo with it." 4 }
 $xbe = Join-Path $sourceDir 'game_files\mercenaries-retail\default.xbe'
 $xbeSha = (Get-FileHash $xbe -Algorithm SHA256).Hash
-if ($xbeSha -ne $SupportedXbeSha) { Fail "Your disc's default.xbe ($xbeSha) is not the supported USA retail build." }
+if ($xbeSha -ne $SupportedXbeSha) { Fail "Your disc's default.xbe ($xbeSha) is not the supported USA retail build." 5 }
 
 # ---------------------------------------------------------------- 5. Install
 Say "`n[4/5] Installing to $gameDir..." 'Green'
+Progress 0.85 'Installing'
 Get-Process 'mercenaries_recomp', 'Mercenaries Recompiled' -ErrorAction SilentlyContinue | Stop-Process -Force
 New-Item -ItemType Directory -Force -Path $gameDir | Out-Null
 # Never overwrite the player's saves, settings or mod choices.
@@ -232,6 +259,7 @@ Say "  Display: 1080p borderless unless already set in Recomp Options"
 
 # ---------------------------------------------------------------- 6. Mods generated from YOUR game files
 Say "`n[5/5] Generating mods from your own game files..." 'Green'
+Progress 0.92 'Making the All Supports and Clear Skies mods'
 $latin1 = [Text.Encoding]::GetEncoding(28591)
 $data = Join-Path $retailDst 'DATAxbox'
 
@@ -353,6 +381,7 @@ if (-not $NoShortcut) {
 }
 
 Say "`nDone. Installed to $gameDir" 'Green'
+Progress 1.00 'Done'
 Say 'In game: F9 (or L3+R3 on a controller) opens the cheat panel. Hold LB + click R3 (or F7) calls an airstrike at your crosshair.'
 Say 'In the mod selector, All Supports and Clear Skies are already ticked. Untick them to play without.'
 Say "To update later: run Install.cmd -Update (keeps saves and settings)."
