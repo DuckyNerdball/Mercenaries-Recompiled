@@ -1,192 +1,91 @@
-# Mercenaries Recompiled
+# Mercenaries Recompiled — Cheat-Menu Build
 
-DISCLAIMER: This project utilized a hybrid-workflow and iterative development.
-	    It was built with the assistance of Codex 5.6 Sol and Astra!
+A fork of [KraftMacAndChee/Mercenaries-Recompiled](https://github.com/KraftMacAndChee/Mercenaries-Recompiled),
+the native Windows port of **Mercenaries: Playground of Destruction** (Xbox), with a full cheat
+menu, airstrikes you can call anywhere, a warzone spawner and extra image options.
 
-A native Windows port of **Mercenaries: Playground of Destruction**, built with
-[xboxrecomp](https://github.com/sp00nznet/xboxrecomp). The project translates the
-original Xbox executable into C and supplies compatibility layers for graphics,
-audio, input, memory, and kernel services.
+**Source only. Bring your own game.** This repository contains no disc image, extracted game
+data, generated code or game executable. You build it from your own USA retail Xbox copy.
 
-**You must supply your own supported retail Xbox copy of the game.** This source
-repository does not include a disc image, extracted game-data tree, or generated
-game executable. A PS2 disc is not a substitute for the Xbox build input.
+Full feature list, controls, test status and changed files: **[docs/CHEAT_MENU.md](docs/CHEAT_MENU.md)**
 
-[Build guide](ports/mercenaries/README.md) ·
-[Documentation](docs/README.md) ·
-[Architecture](ARCHITECTURE.md) ·
-[Contributing](CONTRIBUTING.md) ·
-[Dependencies and licenses](docs/dependencies.md)
+## What it adds
 
-## Cheat-menu build (this fork)
+- **Cheats page** in the F9 developer panel: god mode, infinite ammo, money, shop and
+  cheat-code unlocks, 15 outfits (including Han Solo and Indiana Jones), weapon and pickup
+  drops, factions friendly/hostile, infinite money, NPC density x1–x3.
+- **Airstrikes anywhere**: 23 strikes at your crosshair, on foot, driving or flying. Includes
+  Gunship 2/3, the Chinese artillery barrages, two unused dev "killbox" strikes and three cut aircraft.
+- **Warzone**: hostile tank fields, armored assaults, infantry companies and explosive fuel
+  depots at your crosshair, plus optional ambush waves.
+- **Deck of 52**: load any numbered card's camp on demand.
+- **Wake-up range** x1–x4: NPCs, vehicles and camps become active further out.
+- **Free Cam**: strikes, warzones and spawns follow the free camera.
+- **Recomp Options**: brightness slider and sharpening (Off / Low / Medium / High).
 
-This is **DuckyNerdball's fork**, branch `cheat-menu`, of
-[KraftMacAndChee/Mercenaries-Recompiled](https://github.com/KraftMacAndChee/Mercenaries-Recompiled).
-It adds to the F9 developer panel (L3 + R3 on a controller):
+## Controls
 
-- **Cheats page**: god mode, infinite ammo, money, shop and cheat-code unlocks, 15 outfits,
-  weapon/pickup drops, faction friendly/hostile, infinite money, NPC density x1–x3.
-- **Airstrikes anywhere**: 23 strikes (including unused dev "killbox" and cut aircraft) called at
-  your crosshair on foot, driving or flying — hold **LB + click R3** or press **F7**, **LB + D-pad** to pick.
-- **Warzone**: hostile tank fields, armored assaults, infantry companies and fuel depots at your
-  crosshair, plus optional ambush waves.
-- **Deck of 52**: load card NPC camps on demand.
-- **Wake-up range** x1–x4 for NPCs, vehicles and camps; Free Cam strikes and spawns.
-- **Brightness** slider and **sharpening** in Recomp Options.
+| Input | Action |
+|---|---|
+| F9, or L3 + R3 on a controller | Open / close the developer panel |
+| LB / RB, D-pad, A, B | Change page, move / change value, activate, close |
+| Hold LB + click R3, or F7 | Call the selected airstrike at the crosshair |
+| Hold LB + D-pad left/right | Choose the airstrike (shown on the HUD) |
 
-Full feature list, controls, test status, known issues and changed files:
-**[docs/CHEAT_MENU.md](docs/CHEAT_MENU.md)**. Same rules as upstream: source only, bring your own game.
+The panel needs `developer_menu=1` in `developer.ini` next to the game.
 
-## What is in this repository?
+## Install (easiest)
 
-This is the maintained source, translation tooling, tests, documentation, and
-pinned dependencies for the Windows x64 port. Features include keyboard/mouse
-and controller support, configurable controls, resolution and aspect-ratio
-options, an FPS cap, and selectable original-game bug compatibility. See the
-[default controls](docs/DEFAULT_CONTROLS.md) and
-[OG Bugs behavior](docs/original-game-bugs.md) for details.
-
-The source archive is a developer package. It must be built before it can be
-played. A player release is a separate package containing the launcher, native
-runtime, dependencies, and first-launch instructions.
-
-Windows x64 is the supported native build. Wine/Proton runs the Windows payload
-as a separate compatibility path. The reusable toolkit's POSIX/OpenGL code does
-not imply a supported native Linux or macOS Mercenaries build.
+Download **MercenariesCheatBuild-Installer** from [Releases](https://github.com/DuckyNerdball/Mercenaries-Recompiled/releases),
+extract it and run `Install.cmd`. It asks for your Xbox ISO, installs Python 3.12 and the Visual Studio 2022
+Build Tools if needed (several GB), builds the game on your PC from your own disc (20–40 minutes), and puts a
+shortcut on your desktop. The download contains only the installer script: no game code or data.
 
 ## Build from source
 
-Install these prerequisites:
+Prerequisites:
 
-- Python **3.12**, available through the Windows `py` launcher.
-- Visual Studio **2022**, with the C++ desktop build tools, MSVC
-  **14.44.35207**, and Windows SDK **10.0.26100.0**.
-- PowerShell 7 or Windows PowerShell 5.1.
-- Your legally obtained **USA retail Xbox Mercenaries ISO**.
-
-From the repository root in PowerShell:
+- Python **3.12** (Windows `py` launcher)
+- Visual Studio **2022** with the C++ desktop tools, MSVC **14.44.35207** and Windows SDK **10.0.26100.0**
+- PowerShell 7 or Windows PowerShell 5.1
+- Your **USA retail Xbox Mercenaries ISO** (`default.xbe` SHA-256 `AA08EA21D952AC35F49C02C7E2ED08AA25AD7535FBBBCCC95636775F37BE99D7`)
 
 ```powershell
+git clone -b cheat-menu https://github.com/DuckyNerdball/Mercenaries-Recompiled.git
+cd Mercenaries-Recompiled
 & .\ports\mercenaries\scripts\Build-From-Iso.ps1 -IsoPath 'D:\Games\Mercenaries.iso'
 ```
 
-The example ISO path is a placeholder. Setup creates `.venv` and installs the
-pinned Python dependencies; this step needs access to the Python package index
-or an appropriate local cache. The extractor and required runtime libraries are
-bundled with their notices. Visual Studio and the Windows SDK must already be
-installed.
+Output is in `build/mercenaries/bin/Release/`. Run `Mercenaries Recompiled.exe` and keep the
+DLLs and folders next to it. See the [port guide](ports/mercenaries/README.md) for details.
 
-The script extracts and verifies the retail input, generates and patches the
-translated C, builds the runtime and launcher, and writes build provenance.
-The supported `default.xbe` SHA-256 is:
+**Already have the prebuilt release installed?** Close the game and copy `mercenaries_recomp.exe`
+and `Mercenaries Recompiled.exe` from the build output over the ones in your install (back them up
+first). Your saves, settings and mods stay as they are.
 
-```text
-AA08EA21D952AC35F49C02C7E2ED08AA25AD7535FBBBCCC95636775F37BE99D7
-```
+## Known limits
 
-Default output:
+- Several heavy bomber strikes fired within a second or two can crash the game.
+- Big warzones drop the frame rate hard; the engine was built for the original Xbox's object budget.
+- Draw distance is not extended, and new buildings can't be added (they are part of each region's map data).
 
-```text
-build/mercenaries/bin/Release/
-    Mercenaries Recompiled.exe    # First-launch setup and launcher
-    mercenaries_recomp.exe        # Internal game runtime
-```
-
-Keep the DLLs and supporting directories beside those executables. Start
-`Mercenaries Recompiled.exe` and select the supported ISO when prompted.
-See the [port guide](ports/mercenaries/README.md) for the installation contract
-and [release maintenance](docs/release-maintenance.md) for player packaging.
-A root-only CMake build produces toolkit libraries, not the game executable.
-
-Do not edit `ports/mercenaries/src/recomp/gen` to make permanent fixes. Its
-contents are regenerated; durable patches belong in the maintained generator,
-patch script, or port integration code.
-
-## Playing a prebuilt release
-
-Extract the entire player package and run `Mercenaries Recompiled.exe`. The
-launcher extracts and verifies your ISO on first launch; it does **not** compile
-the game on your computer. Keep the package's DLLs, `tools`, and `compat`
-directories together. Follow its `README-FIRST-LAUNCH.txt` for the instructions
-appropriate to that build. This source package does not contain those playable
-executables.
-
-## Reporting a problem
-
-Use the repository's Issues tab. Include the exact build/version or executable
-hash, Windows version, CPU/GPU/RAM, resolution, control device, reproduction
-steps, and expected versus observed behavior. Mention any mods or changed
-settings. A screenshot or a short recording can help with rendering issues.
-
-For a runtime log, set `logging=1` under `[Developer]` in the player package's
-`developer.ini`, restart, and reproduce the problem. Press **F8** while the game
-has focus to mark the event in `preview-logs`. Logging is off by default. The
-optional F9 developer menu separately requires `developer_menu=1` and a restart.
-
-Review logs before attaching them; they can contain local paths. Do not upload
-disc images, extracted game data, or memory dumps to a public issue. Arrange a
-private channel if a maintainer needs a save or dump.
-
-## Contributing and validation
-
-Read [CONTRIBUTING.md](CONTRIBUTING.md) before changing guest-memory behavior,
-generated-code interfaces, rendering, audio, threading, or timing. Compatibility
-code can have ordering and lifetime requirements that ordinary refactoring
-would accidentally change.
-
-Tests are under `tools/`. Some use only maintained source, others compile native
-fixtures, and others require a verified retail input, generated code, or a
-specific capture. The isolated runner lists and selects tests without importing
-unrelated modules:
-
-```powershell
-& .\.venv\Scripts\python.exe -m pip install pytest
-& .\.venv\Scripts\python.exe -X utf8 -B tools/recomp/run_tests.py --list
-& .\.venv\Scripts\python.exe -X utf8 -B tools/recomp/run_tests.py --match source_package_policy --output artifacts/source-policy-check
-```
-
-Use a new output directory for each run. Follow the contributor guide for the
-compiler environment and full-suite prerequisites. See
-[validation status](docs/maintenance-validation.md) and
-[the latest comment-cleanup baseline](docs/stale-comment-cleanup.md) for known
-failures. The recorded baseline has **458 successful module exits out of 471**;
-it is not an all-green test suite or a gameplay guarantee.
-
-## Finding your way around
-
-| Path | Responsibility |
-| --- | --- |
-| `ports/mercenaries/src` | Game integration, controls, options, launcher, manual overrides |
-| `ports/mercenaries/scripts` | Extraction, generation patches, builds, packaging |
-| `ports/mercenaries/resources` | Embedded launcher resources and optional upgrade assets |
-| `src`, `include` | Shared Xbox runtime and interfaces |
-| `tools/recomp`, `tools/disasm`, `tools/func_id`, `tools/xbe_parser` | Translation pipeline and regression tests |
-| `tools/diagnostics`, `tools/debug` | Optional investigation utilities |
-| `templates` | Starting points for other Xbox ports |
-| `docs` | Current guides and dated investigation records |
-| `third_party`, `ports/mercenaries/third_party` | Dependencies, corresponding sources where bundled, notices |
-
-Start with [ARCHITECTURE.md](ARCHITECTURE.md) and [CODE_MAP.md](CODE_MAP.md).
-The [documentation index](docs/README.md) gives the full maintainer reading order.
-Historical records explain decisions and failed approaches; their conclusions
-may have been superseded. Local evidence archives referenced by those records
-are not shipped. See [source distribution](docs/source-distribution.md) for the
-export boundary, manifest, and instructions for importing this snapshot into Git.
+Bugs in this fork: open an issue here. Bugs that also happen on the unmodified port belong
+[upstream](https://github.com/KraftMacAndChee/Mercenaries-Recompiled/issues). Don't attach disc
+images, game data or memory dumps to a public issue.
 
 ## Credits and licensing
 
-Mercenaries Recompiled is by Trenton Turner (KraftMacAndChee), building on
-sp00nz's xboxrecomp toolkit and work from the Xbox emulation and modding
-communities. This is an unofficial fan project, not an official game release.
+Mercenaries Recompiled is by Trenton Turner (KraftMacAndChee), building on sp00nz's
+[xboxrecomp](https://github.com/sp00nznet/xboxrecomp) toolkit and work from the Xbox emulation
+and modding communities. The cheat-menu additions are by DuckyNerdball. This is an unofficial fan
+project, not an official game release. Mercenaries and its game assets belong to their respective owners.
 
-The root [MIT license](LICENSE) retains the toolkit's copyright notice. It does
-not replace imported components' licenses. xemu-derived code carries per-file
-LGPL notices; SDL2, DSP56300, Lua, fonts, and other dependencies retain their own
-licenses. The bundled Windows SDK shader compiler has separate redistribution
-terms. Consult the [dependency inventory](docs/dependencies.md) and accompanying
-notice files before redistributing a modified package.
+The root [MIT license](LICENSE) retains the toolkit's copyright notice and does not replace imported
+components' licenses. xemu-derived code carries per-file LGPL notices; SDL2, DSP56300, Lua, fonts and
+other dependencies keep their own licenses, and the bundled Windows SDK shader compiler has separate
+redistribution terms. See the [dependency inventory](docs/dependencies.md) and notice files before
+redistributing a modified package. Maintainer-supplied artwork, controller prompts and optional upgrade
+resources are retained and gain no new rights under the root MIT license.
 
-Maintainer-supplied artwork, controller prompts, and optional upgrade resources
-are retained. Their inclusion does not grant new rights to those assets under
-the root MIT license. Mercenaries and its game assets belong to their respective
-owners. This export preserves attribution and development records.
+Upstream documentation is unchanged: [Architecture](ARCHITECTURE.md) · [Code map](CODE_MAP.md) ·
+[Documentation index](docs/README.md) · [Contributing](CONTRIBUTING.md)

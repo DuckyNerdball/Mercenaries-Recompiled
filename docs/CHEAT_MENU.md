@@ -8,6 +8,15 @@ from your own retail Xbox copy exactly as described in the main [README](../READ
 
 Base: upstream `f513ae4` ("Added DLL Plugin System").
 
+## Installer
+
+`installer/Install.cmd` (also attached to each release) builds and installs everything from the player's own
+ISO: prerequisites, source download, the official `Build-From-Iso.ps1`, install to `%USERPROFILE%\Games\Mercenaries Cheat Build\Game`,
+F9 panel on, and the **All Supports** / **Clear Skies** mods generated from the player's own game files
+(enabled, normal save slots), and 1920x1080 borderless unless the player already picked a resolution or display mode.
+`Install.cmd -Update` rebuilds from the latest source, keeps saves and settings, and re-ticks both mods.
+`Install.cmd -SkipBuild` reinstalls from an existing build without rebuilding.
+
 ## Turning it on
 
 - Set `developer_menu=1` in `developer.ini` next to the game.
